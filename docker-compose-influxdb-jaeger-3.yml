@@ -3,7 +3,7 @@ version: '3'
 services:
   ## Fetches the configuration
   ocelot-config-server:
-    image: inspectit/inspectit-ocelot-configurationserver:${INSPECTIT_OCELOT_VERSION}
+    image: inspectit/inspectit-ocelot-configurationserver:2.4.1
     container_name: ocelot-config-server
     deploy:
       resources:
@@ -19,7 +19,7 @@ services:
   #  Ocelot
   ## Serves as a collector for traces
   agent:
-    image: inspectit/inspectit-ocelot-agent:${INSPECTIT_OCELOT_VERSION}
+    image: inspectit/inspectit-ocelot-agent:2.4.1
     container_name: agent
     deploy:
       resources:
@@ -30,7 +30,7 @@ services:
 
   ## Self Monitoring
   ocelot-eum-server:
-    image: inspectit/inspectit-ocelot-eum-server:${INSPECTIT_OCELOT_VERSION}
+    image: inspectit/inspectit-ocelot-eum-server:2.4.0
     container_name: ocelot-eum-server
     environment:
       - INSPECTIT_EUM_SERVER_EXPORTERS_METRICS_INFLUX_URL=http://influxdb:8086

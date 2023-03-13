@@ -8,3 +8,7 @@ https://gist.github.com/bocharovf/e19fa80f7b5f6b65db17249c91e79416
 
 sudo sysctl -w vm.max_map_count=262144
 sudo systemctl restart docker
+
+Setup Kibana:
+Index Pattern: jaeger-*
+Time: startTimeMillis

@@ -4,7 +4,7 @@ inspectit:
     scopes:
       's_mysql_prepared_statement_execute':
         type:
-          name: 'com.mysql.cj.jdbc.JDBCPreparedStatement'
+          name: 'com.mysql.cj.jdbc.ClientPreparedStatement'
         methods:
           - name: 'execute'
             matcher-mode: STARTS_WITH
@@ -14,14 +14,11 @@ inspectit:
       'a_mysql_prepared_statement_get_sql':
         imports:
           - 'com.mysql.cj.jdbc'
-          - 'java.lang.reflect'
         input:
-          _this: 'JDBCPreparedStatement'
+          _this: 'ClientPreparedStatement'
           _class: 'Class'        
         value-body: |
-          Field sqlField = _class.getDeclaredField("sql");
-          sqlField.setAccessible(true);
-          return sqlField.get(_this);
+          return _this.toString();
     
     rules:
       'r_mysql_get_prep_statement_sql':

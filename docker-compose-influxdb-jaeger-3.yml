@@ -1,0 +1,172 @@
+version: '3'
+
+services:
+  ## Fetches the configuration
+  ocelot-config-server:
+    image: inspectit/inspectit-ocelot-configurationserver:${INSPECTIT_OCELOT_VERSION}
+    container_name: ocelot-config-server
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    environment:
+      - INSPECTIT_CONFIG_SERVER_WORKING_DIRECTORY=/configuration-server
+      - INSPECTIT_CONFIG_SERVER_DEFAULT_USER_PASSWORD=demo
+    volumes:
+      - ./configuration-server:/configuration-server
+    ports:
+      - 8090:8090
+  #  Ocelot
+  ## Serves as a collector for traces
+  agent:
+    image: inspectit/inspectit-ocelot-agent:${INSPECTIT_OCELOT_VERSION}
+    container_name: agent
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    volumes:
+      - ./agent:/agent
+
+  ## Self Monitoring
+  ocelot-eum-server:
+    image: inspectit/inspectit-ocelot-eum-server:${INSPECTIT_OCELOT_VERSION}
+    container_name: ocelot-eum-server
+    environment:
+      - INSPECTIT_EUM_SERVER_EXPORTERS_METRICS_INFLUX_URL=http://influxdb:8086
+      - INSPECTIT_EUM_SERVER_EXPORTERS_METRICS_INFLUX_DATABASE=inspectit_eum
+      - INSPECTIT_EUM_SERVER_EXPORTERS_TRACING_JAEGER_GRPC=jaeger:14250
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    volumes:
+      - ./eum-server:/eum-server
+    ports:
+      - 8085:8085
+
+  #  Monitoring Backend
+
+  #  InfluxDB
+  ## Time Series Database
+  influxdb:
+    image: influxdb:1.8
+    container_name: influxdb
+    environment:
+      - INFLUXDB_HTTP_FLUX_ENABLED=true
+      - INFLUXDB_HTTP_LOG_ENABLED=false
+      - INFLUXDB_DATA_QUERY_LOG_ENABLED=false
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    volumes:
+      - ./influx:/docker-entrypoint-initdb.d
+    ports:
+      - 8086:8086
+
+  els:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.0.0
+    restart: always
+    container_name: els
+    hostname: els
+    environment:
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    mem_limit: 1g
+    volumes:
+      - esdata1:/usr/share/elasticsearch/data
+      - eslog:/usr/share/elasticsearch/logs
+      - ./config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+  
+  kibana:
+    image: docker.elastic.co/kibana/kibana:6.0.0
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_URL: http://els:9200
+    depends_on:
+    - els
+ 
+  jaeger-collector:
+    image: jaegertracing/jaeger-collector:1.5.0
+    ports:
+      - "14267:14267"
+      - "14268:14268"
+      - "9411:9411"
+    depends_on:
+    - els
+    container_name: jaeger-collector
+    hostname: jaeger-collector
+    restart: unless-stopped
+    command: ["/go/bin/collector-linux", "--span-storage.type=elasticsearch", "--es.server-urls=http://els:9200"]
+  
+  jaeger-agent:
+    image: jaegertracing/jaeger-agent:1.5.0
+    ports:
+      - "5775:5775/udp"
+      - "5778:5778"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+    depends_on:
+    - els
+    - jaeger-collector
+    restart: unless-stopped
+    container_name: jaeger-agent
+    hostname: jaeger-agent
+    command: ["/go/bin/agent-linux", "--collector.host-port=jaeger-collector:14267"]
+
+  jaeger-query:
+    image: jaegertracing/jaeger-query:1.5.0
+    ports:
+      - 16686:16686
+    depends_on:
+      - els
+      - jaeger-collector
+    restart: unless-stopped
+    container_name: jaeger-query
+    hostname: jaeger-query
+    command: ["/go/bin/query-linux", "--span-storage.type=elasticsearch", "--es.server-urls=http://els:9200", "--es.sniffer=false", "--query.static-files=/go/jaeger-ui/", "--log-level=debug"]
+
+  #  Grafana
+  ## Dashboarding
+  grafana:
+    image: grafana/grafana:9.0.2
+    container_name: grafana
+    environment:
+      - GF_PANELS_DISABLE_SANITIZE_HTML=TRUE
+      - GF_SECURITY_ADMIN_PASSWORD=demo
+      - GF_PATHS_PROVISIONING=/usr/share/grafana/custom/
+      - GF_INSTALL_PLUGINS=https://github.com/NovatecConsulting/novatec-service-dependency-graph-panel/releases/download/v4.0.2/novatec-sdg-panel.zip;novatec-sdg-panel
+    volumes:
+      - ./grafana/provisioning/influxdb:/usr/share/grafana/custom/
+      - ./grafana/provisioning/home-dashboard/home.json:/usr/share/grafana/public/dashboards/home.json
+    ports:
+      - 3000:3000
+
+  # Grafana Loki & Promtail
+  ## Make logs available in Grafana
+  loki:
+    image: grafana/loki:2.5.0
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image: grafana/promtail:2.5.0
+    volumes:
+      - /var/log:/var/log
+    command: -config.file=/etc/promtail/config.yml
+
+volumes:
+  agent-vol:
+  esdata1:
+    driver: local
+  eslog:
+    driver: local
